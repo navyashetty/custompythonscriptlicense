@@ -1,0 +1,117 @@
+#!/usr/bin/python
+# -*- coding: utf-8> -*-
+import requests
+import pandas as pd
+import json
+import sys, getopt
+import pprint
+from collections import namedtuple
+import csv
+import os.path
+from os import path
+import click
+import socket
+import psycopg2
+
+try:
+    import requests
+except ImportError:
+    print("Please install the python-requests module")
+    sys.exit(-1)
+
+# Get the hosting location details
+host_name = socket.gethostname()
+if 'dmz' in host_name:
+   hosting_location = "dmz"
+else:
+   hosting_location = "on-premises"
+
+# Clear the CSV and print the headers
+try:
+    os.remove('/var/log/reporting/crucible_license_detail.csv')
+except OSError:
+    pass
+
+# Get the Active user count of Crucible and Fisheye license
+# Setting the configuration for establishing connection with database 
+config = {
+  'user': '{{ crucible_db_user }}',
+  'password': '{{ crucible_db_pass }}',
+  'host': '{{ crucible_db_host_slave }}',
+  'database': '{{ crucible_db_name }}',
+}
+db = psycopg2.connect(**config)
+cursor = db.cursor()
+# Query to fetch the count of crucible users
+query = "select count (cwu.id) from cwd_user cwu join cwd_membership cwm on cwu.id = cwm.child_id join cwd_group cwg on cwm.parent_id = cwg.id where cwg.lower_group_name = 'crucible-users' and  cwm.lower_parent_name = 'crucible-users' and cwu.active = 'T';"
+cursor.execute(query)
+result = cursor.fetchall()
+crucibleuser = result[0][0]
+cursor.close()
+db.close()
+
+def get_http(url, username, password, conf, outputfile):
+    formatted_url = '{}/rest/plugins/1.0/purchased/available'.format(url)
+    res = requests.get(formatted_url, auth=(username, password),verify=False)
+    data=res.json()
+    sam=data["hostStatus"]
+    sam1=sam["hostLicense"]
+    try:
+        info= dict(License_ID = sam1['supportEntitlementNumber'],
+                 Purchase_Date = '{{ creationDateString }}',
+                 Expiry_Date = '{{ expiryDateString }}',
+                 License_Type = sam1['licenseType'],
+                 Total_User_Count = sam1['maximumNumberOfUsers'],
+                 Active_User_Count = crucibleuser,
+                 App_Version = '{{ crucible_version }}',
+                 BASE_URL= url,
+                 License_Owner = '{{ license_owner }}',
+                 License_Contact = '{{ license_contact }}',
+                 License_Quote = conf[sam1['supportEntitlementNumber']]['quote'],
+                 License_price = conf[sam1['supportEntitlementNumber']]['price'],
+                 License_Requester = conf[sam1['supportEntitlementNumber']]['requester'],
+                 Hosting_Location = hosting_location,
+                 Application_Type = '{{ service_name | list | join("\", \"") }}')
+    except:
+        info= dict(License_ID = sam1['supportEntitlementNumber'],
+                 Purchase_Date = '{{ creationDateString }}',
+                 Expiry_Date = '{{ expiryDateString }}',
+                 License_Type = sam1['licenseType'],
+                 Total_User_Count = sam1['maximumNumberOfUsers'],
+                 Active_User_Count = crucibleuser,
+                 App_Version = '{{ crucible_version }}',
+                 BASE_URL= url,
+                 License_Owner = '{{ license_owner }}',
+                 License_Contact = '{{ license_contact }}',
+                 License_Quote = "DATA_MISSING",
+                 License_price = "DATA_MISSING",
+                 License_Requester= "DATA_MISSING",
+                 Hosting_Location = hosting_location,
+                 Application_Type = '{{ service_name | list | join("\", \"") }}')
+    dict3 = {**info}
+    df = pd.DataFrame.from_dict(dict3, orient='index').T
+    df_to_csv(df, outputfile)
+
+def df_to_csv(df,outputfile):
+    out_path = '{}/crucible_license_detail.csv'.format(outputfile)
+    if path.exists(out_path):
+        print('true')
+        df.to_csv(out_path, mode='a', header=False, index=False)
+    else:
+        df.to_csv(out_path, index=False)
+        print('false')
+
+
+@click.command()
+@click.option('-c', '--cfile', 'conffile')
+@click.option('-o', '--ofile', 'outputfile')
+def main(conffile, outputfile):
+    conf = json.load(open(conffile),)
+    url = conf['crucible']['crucible_api']
+    username = conf['crucible']['user']
+    password = conf['crucible']['password']
+    get_http(url, username, password, conf, outputfile)
+
+
+if __name__ == '__main__':
+    main()
