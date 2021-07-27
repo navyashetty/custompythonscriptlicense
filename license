@@ -1,0 +1,160 @@
+#!/usr/bin/python
+# -*- coding: utf-8> -*-
+import requests
+import pandas as pd
+import json
+import sys, getopt
+import pprint
+from collections import namedtuple
+import csv
+import os
+import os.path
+from os import path
+import click
+import socket
+
+try:
+    import requests
+except ImportError:
+    print("Please install the python-requests module")
+    sys.exit(-1)
+
+# Get the hosting location details
+host_name = socket.gethostname()
+if 'dmz' in host_name:
+   hosting_location = "dmz"
+else:
+   hosting_location = "on-premises"
+
+# Clear the CSV and print the headers
+try:
+    os.remove('/var/log/reporting/jira_license_detail.csv')
+except OSError:
+    pass
+
+      
+def flatten_json(y):
+    out = {}
+
+    def flatten(x, name=''):
+        if type(x) is dict:
+            for a in x:
+                flatten(x[a], name + a + '_')
+        elif type(x) is list:
+            i = 0
+            for a in x:
+                flatten(a, name + str(i) + '_')
+                i += 1
+        else:
+            out[name[:-1]] = x
+
+    flatten(y)
+    return out
+
+
+def get_http(url, username, password, conf, outputfile):
+    formatted_url = '{}/rest/plugins/applications/1.0/installed/jira-software'.format(url)
+    res = requests.get(formatted_url, auth=(username, password),verify=False)
+    request=res.text
+    data=json.loads(request)
+    sam=data["license"]
+    sam1=data["accessDetails"]
+    sam3=data["links"]
+    try:
+        info= dict(License_ID = sam['supportEntitlementNumber'],
+                Purchase_Date = sam['creationDateString'],
+                Expiry_Date = sam['expiryDateString'],
+                License_Type = sam['licenseType'],
+                Total_User_Count = sam1['licensedUserCount'],
+                Active_User_Count = sam1['activeUserCount'],
+                App_Version = data['version'],
+                BASE_URL= 'https://' + sam3['delete'].split('//')[-1].split('/')[0],
+                License_Owner = '{{ license_owner }}',
+                License_Contact = '{{ license_contact }}',
+                License_Quote = conf[sam['supportEntitlementNumber']]['quote'],
+                License_price = conf[sam['supportEntitlementNumber']]['price'],
+                License_Requester = conf[sam['supportEntitlementNumber']]['requester'])
+    except:
+        info= dict(License_ID = sam['supportEntitlementNumber'],
+                Purchase_Date = sam['creationDateString'],
+                Expiry_Date = sam['expiryDateString'],
+                License_Type = sam['licenseType'],
+                Total_User_Count = sam1['licensedUserCount'],
+                Active_User_Count = sam1['activeUserCount'],
+                App_Version = data['version'],
+                BASE_URL= 'https://' + sam3['delete'].split('//')[-1].split('/')[0],
+                License_Owner = '{{ license_owner }}',
+                License_Contact = '{{ license_contact }}',  
+                License_Quote = "DATA_MISSING",
+                License_price = "DATA_MISSING",
+                License_Requester = "DATA_MISSING")
+    licdet = '{}/rest/plugins/latest/'.format(url)
+    res = requests.get(licdet, auth=(username, password),verify=False)
+    data = json.loads(res.text)
+    pluginlen = len(data['plugins'])
+    pluginInfo = flatten_json(data)
+    for i in range(0,pluginlen):
+       if pluginInfo['plugins_{}_userInstalled'.format(i)] == True:
+          licUrl ='{}/rest/plugins/1.0/{}-key/license/'.format(url, pluginInfo['plugins_{}_key'.format(i)])
+          licRes = requests.get(licUrl, auth=(username, password),verify=False)
+          try:
+              licInfo= licRes.json()
+          except ValueError:
+              print("Response content is not valid JSON")
+          try:
+              licdet = dict(Plugin_Name = pluginInfo['plugins_{}_name'.format(i)],
+                         Plugin_Version = pluginInfo['plugins_{}_version'.format(i)],
+                         Plugin_Vendor_Name = pluginInfo['plugins_{}_vendor_name'.format(i)],
+                         Plugin_Purchase_Date = licInfo['creationDateString'],
+                         Plugin_Expiry_Date = licInfo['maintenanceExpiryDateString'],
+                         Plugin_License_Type = licInfo['licenseType'],
+                         Plugin_License_ID = licInfo['supportEntitlementNumber'])
+          except KeyError:
+              licdet = dict(Plugin_Name = pluginInfo['plugins_{}_name'.format(i)],
+                         Plugin_Version = pluginInfo['plugins_{}_version'.format(i)],
+                         Plugin_Vendor_Name = pluginInfo['plugins_{}_vendor_name'.format(i)],
+                         Plugin_Purchase_Date = "Null",
+                         Plugin_Expiry_Date = "Null",
+                         Plugin_License_Type = "Null",
+                         Plugin_License_ID = "Null")
+          try:
+              plugprice = dict(Plugin_License_Quote = conf[licInfo['supportEntitlementNumber']]['quote'],
+                            Plugin_License_price = conf[licInfo['supportEntitlementNumber']]['price'],
+                            Plugin_License_Requester = conf[licInfo['supportEntitlementNumber']]['requester'],
+                            Hosting_Location = hosting_location,
+                            Application_Type = '{{ service_name | list | join("\", \"") }}')
+          except:
+              plugprice = dict(Plugin_License_Quote = "DATA_MISSING",
+                            Plugin_License_price = "DATA_MISSING",
+                            Plugin_License_Requester = "DATA_MISSING",
+                            Hosting_Location = hosting_location,
+                            Application_Type = '{{ service_name | list | join("\", \"") }}')
+          dict3 = {**info, **licdet, **plugprice}
+          df = pd.DataFrame.from_dict(dict3, orient='index')
+          df_t = df.T
+          df_t_to_csv(df_t, outputfile)
+
+
+def df_t_to_csv(df_t,outputfile):
+    out_path = '{}/jira_license_detail.csv'.format(outputfile)
+    if path.exists(out_path):
+        print('true')
+        df_t.to_csv(out_path, mode='a', header=False, index=False)
+    else:
+        df_t.to_csv(out_path, index=False)
+        print('false')
+
+
+@click.command()
+@click.option('-c', '--cfile', 'conffile')
+@click.option('-o', '--ofile', 'outputfile')
+def main(conffile, outputfile):
+    conf = json.load(open(conffile),)
+    url = conf['jira']['jira_api']
+    username = conf['jira']['user']
+    password = conf['jira']['password']
+    get_http(url, username, password, conf, outputfile)
+
+
+if __name__ == '__main__':
+    main()
