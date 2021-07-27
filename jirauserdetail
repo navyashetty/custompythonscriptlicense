@@ -1,0 +1,36 @@
+import os
+import mysql.connector
+
+jira_instance_url='{{ jira_vhost }}'
+
+# Setting the configuration for establishing connection with database
+config = {
+  'user': '{{ jira_db_user }}',
+  'password': '{{ jira_db_pass }}',
+  'host': '{{ jira_db_host_slave }}',
+  'database': '{{ jira_db_name }}',
+  'raise_on_warnings': True
+}
+db = mysql.connector.connect(**config)
+cursor = db.cursor(buffered = True)
+
+query = "SELECT u.id, u.lower_user_name, u.lower_email_address, u.lower_display_name, u.active, u.created_date, from_unixtime((cast(attribute_value AS UNSIGNED)/1000)) FROM cwd_user u JOIN (SELECT DISTINCT child_id, child_name, lower_parent_name, directory_id FROM cwd_membership m JOIN licenserolesgroup gp ON m.parent_name = gp.GROUP_ID) AS m ON m.child_name = u.user_name AND u.id = m.child_id AND u.directory_id = m.directory_id LEFT JOIN (SELECT * FROM cwd_user_attributes WHERE attribute_name = 'login.lastLoginMillis') AS a ON a.user_id = u.id JOIN cwd_directory d ON u.directory_id = d.id WHERE u.active = 1 AND m.lower_parent_name in ('jira-users', 'jira-software-users', 'jira-core-users') AND d.active = 1;"
+
+# Clear the CSV and print the headers
+os.system('rm -f {{ report_output_directory }}jira_user_lastlogin.csv')
+f = open(r"{{ report_output_directory }}jira_user_lastlogin.csv", "w")
+f.write("jira_instance_url,jira_userid,username,email_address,full_name,is_active,seen_first,last_login\n")
+
+cursor.execute(query)
+
+for (uuid, lower_user_name, lower_email_address, lower_display_name, active, created_date, last_logged) in cursor:
+  if last_logged is None:
+    last_login_result = ''
+  else:
+    last_login_result = last_logged
+  # Writing the result to the csv file
+  f.write("{},{},{},{},{},{},{},{},\n".format(jira_instance_url,uuid, lower_user_name, lower_email_address, lower_display_name, active, created_date, last_login_result))
+
+f.close()
+cursor.close()
+db.close()
