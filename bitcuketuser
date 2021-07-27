@@ -1,0 +1,35 @@
+import os
+import psycopg2
+
+bitbucket_instance_url='{{ bitbucket_vhost }}'
+
+# Setting the configuration for establishing connection with database
+config = {
+  'user': '{{ bitbucket_db_user }}',
+  'password': '{{ bitbucket_db_pass }}',
+  'host': '{{ bitbucket_db_host_slave }}',
+  'database': '{{ bitbucket_db_name }}',
+}
+db = psycopg2.connect(**config)
+cursor = db.cursor()
+
+query = "SELECT distinct cu.id, cu.lower_user_name, cu.lower_email_address, cu.lower_display_name, cu.is_active, cu.created_date, to_timestamp(CAST(attribute_value AS BIGINT)/1000) FROM cwd_user As cu LEFT JOIN cwd_membership AS cm ON cu.directory_id=cm.directory_id AND cu.lower_user_name=cm.lower_child_name AND cm.membership_type='GROUP_USER' LEFT JOIN cwd_user_attribute As cua ON cu.ID = cua.user_id WHERE is_active = 'T' AND cm.lower_parent_name='stash-users' AND cua.attribute_name = 'lastAuthenticationTimestamp';"
+
+# Clear the CSV and print the headers
+os.system('rm -f {{ report_output_directory }}bitbucket_user_lastlogin.csv')
+f = open(r"{{ report_output_directory }}bitbucket_user_lastlogin.csv", "w")
+f.write("bitbucket_instance_url,bitbucket_userid,username,email_address,full_name,is_active,seen_first,last_login\n")
+
+cursor.execute(query)
+
+for (uuid, lower_user_name, lower_email_address, lower_display_name, active, created_date, last_logged) in cursor:
+  if last_logged is None:
+    last_login_result = ''
+  else:
+    last_login_result = last_logged
+  # Writing the result to the csv file
+  f.write("{},{},{},{},{},{},{},{},\n".format(bitbucket_instance_url,uuid, lower_user_name, lower_email_address, lower_display_name, active, created_date, last_login_result))
+
+f.close()
+cursor.close()
+db.close()
