@@ -1,0 +1,43 @@
+What Is The Typical DevOps workflow?
+
+The typical DevOps workflow is as follows:
+• Atlassian Jira  for writing requirements and tracking tasks.
+• Based on the Jira tasks, developers checking code into GIT version control system.
+• The code checked into GIT is built by using Apache Maven.
+• The build process is automated with Jenkins.
+• During the build process, automated tests run to validate the code checked in by a developer.
+• Code built on Jenkins is sent to organization’s Artifactory.
+• Jenkins automatically picks the libraries from Artifactory and deploys it to Production.
+• During Production deployment, Docker images are used to deploy same code on multiple hosts.
+• Once a code is deployed to Production, we use monitoring tools like icinga are used to check the health of production servers.
+• Splunk based alerts inform the admins of any issues or exceptions in production.
+
+
+DevOps Vs Agile?
+
+Agile is a set of values and principles about how to develop software in a systematic way.
+Where as DevOPs is a way to quickly, easily and repeatably move that software into production infrastructure, in a safe and simple way.
+In oder to achieve that we use a set of DevOps tools and techniques.
+
+What Is The Most Important Thing DevOps Helps Us To Achieve?
+
+Most important aspect of DevOps is to get the changes into production as quickly as possible while minimizing risks in software quality assurance and compliance. This is the primary objective of DevOps.
+What Is Staging Area In GIT?
+
+Staging is a step before the commit process in git. That is, a commit in git is performed in two steps: 
+-Staging and
+-Actual commit
+As long as a change set is in the staging area, git allows you to edit it as you like (replace staged files with other versions of staged files, remove changes from staging, etc.)
+
+What Is Difference Between GIT Fetch & GIT Pull?
+
+GIT fetch – It downloads only the new data from the remote repository and does not integrate any of the downloaded data into your working files. Providing a view of the data is all it does.
+GIT pull – It downloads as well as merges the data from the remote repository into the local working files.
+This may also lead to merging conflicts if the user’s local changes are not yet committed. Using the “GIT stash” command hides the local changes. 
+
+What Is Cherry Picking In GIT?
+
+Cherry picking in git means to choose a commit from one branch and apply it onto another.
+This is in contrast with other ways such as merge and rebase which normally applies many commits onto a another branch.
+Make sure you are on the branch you want apply the commit to. git checkout master Execute the following:
+git cherry-pick <commit-hash>
