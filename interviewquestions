@@ -480,3 +480,20 @@ UNIQUE - Ensures unique values to be inserted into the field.
 INDEX - Indexes a field providing faster retrieval of records.
 PRIMARY KEY - Uniquely identifies each record in a table.
 FOREIGN KEY - Ensures referential integrity for a record in another table.
+
+
+
+
+
+
+How to run Ansible playbook from collection
+
+	1. Install the collection repo
+Ansible-galaxy install -r requirement.yml --force --vvv
+
+	2. Run playbook
+Ansible-playbook wdc.automation.jira -l uls-ot-jira7.wdc.com   ( it works only 2.11 version)
+                                           or
+Ansible-playbook ./ansible_collections/wdc/automation/playbooks/jira.yml -l uls-ot-jira7.wdc.com. (it works on both 2.11 and 2.10 version)
+
+
