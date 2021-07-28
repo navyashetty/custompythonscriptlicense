@@ -1,0 +1,2 @@
+Jira Partner scripts
+====================

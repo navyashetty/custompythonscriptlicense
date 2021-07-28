@@ -1,0 +1,13 @@
+def cfEmailIds = getFieldByName("Email IDs")
+def cfVendorEmail = getFieldByName("Vendor Email")
+def cfVendorName = getFieldByName("Vendor Name")
+def cfVendorUserType = getFieldByName("Vendor User Type")
+def cfSnowTicket = getFieldByName("SNOW Ticket No")
+def cfSandiskProject = getFieldByName("Sandisk Project")
+
+cfEmailIds.setHidden(true)
+cfVendorEmail.setHidden(true)
+cfVendorName.setHidden(true)
+cfVendorUserType.setHidden(true)
+cfSnowTicket.setHidden(true)
+cfSandiskProject.setHidden(true)

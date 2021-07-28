@@ -1,0 +1,98 @@
+#!groovy
+
+notify('Started')
+
+timestamps {
+
+  podTemplate(
+          label: "kube-codenarc-lint-${env.BUILD_NUMBER}",
+          cloud: 'kubernetes',
+          serviceAccount: 'jenkins-test-serviceaccount',
+          containers: [
+                  containerTemplate(
+                          name: 'redhat-codenarc',
+                          image: 'artifactory.wdc.com:6559/redhat-codenarc:latest',
+                          command: 'cat',
+                          ttyEnabled: true,
+                          resourceRequestCpu: '250m',
+                          resourceRequestMemory: '500Mi',
+                          resourceLimitCpu: '250m',
+                          resourceLimitMemory: '500Mi',
+                          alwaysPullImage: true
+                  )
+          ]
+  ) {
+    node("kube-codenarc-lint-${env.BUILD_NUMBER}") {
+      container('redhat-codenarc') {
+
+        source_branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+        target_branch = env.CHANGE_TARGET ?: 'master'
+        changed_groovy_files = []
+        def BASEDIR=''
+
+        stage('Prepare') {
+
+          def test_all = false
+          def changed_files = []
+
+          // checkout target branch
+          git(
+            branch: target_branch,
+            url: 'https://bitbucket.wdc.com/scm/sdf/jira-partner.git',
+            credentialsId: 'jenkins_bitbucket'
+          )
+
+          // checkout source
+          checkout scm
+
+          if (source_branch == 'master') {
+            test_all = true
+          }  // end if
+          else {
+            // get changed files
+            changed_files = sh(returnStdout: true, script: "git diff --name-only \$(git merge-base origin/${target_branch} HEAD)").split()
+            echo "Changed files:\n${changed_files.join('\n')}"
+          }  // end else
+
+          if (test_all) {
+            BASEDIR='-basedir=.'
+          }  // end if
+          else {
+            sh(returnStdout: true, script: "mkdir basepath")
+            changed_files.each { changed_file ->
+              if (changed_file.endsWith('.groovy') && fileExists(changed_file)) {
+                changed_groovy_files.add(changed_file)
+                sh(returnStdout: true, script: "mkdir -p basepath/\$(dirname ${changed_file}) ; cp -f ${changed_file} basepath/\$(dirname ${changed_file})/")
+              }  // end if
+            }  // end each
+            BASEDIR='-basedir=basepath'
+          }  // end else
+
+        }  // end stage
+
+        stage('Lint') {
+
+          try {
+            // run codenar utility
+            sh '''
+              #!/bin/bash
+              java -classpath /opt/codenarc/lib/CodeNarc-1.5.jar:/opt/codenarc/lib/groovy-all-2.4.7.jar:/opt/codenarc/lib/slf4j-api-1.7.25.jar:/opt/codenarc/lib/slf4j-simple-1.6.1.jar:. org.codenarc.CodeNarc '''+ BASEDIR +''' -rulesetfiles="file:./codenarc_rulesets.txt" -maxPriority1Violations=0 -maxPriority2Violations=0 -maxPriority3Violations=0 -report=console
+              '''
+            notify('Success')
+          }  // end try
+          catch (Exception e) {
+            notify('Failed')
+            error e.toString()
+          }  // end catch
+        }  // end stage
+    }  // end container
+  }  // end node
+}  // end template
+
+}  // end timestamps
+
+
+def notify(status) {
+  // send teams notification
+  office365ConnectorSend message: "Latest status of build #${env.BUILD_NUMBER}", status: status, webhookUrl: env.SDF_TEAMS
+}  // end def
