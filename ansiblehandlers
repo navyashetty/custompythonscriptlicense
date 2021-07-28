@@ -1,0 +1,47 @@
+node(master) {
+    stage: checkout SCM
+    git clone credentialid:
+}  stage: install package{
+   shell: 
+} stage: 
+
+
+/etc/ansible/hosts
+
+[test_servers]
+172.17.0.2
+
+---
+hosts: test-server
+sudo: yes
+vars:
+   - server_port: 8080
+
+tasks:
+  - name: install nginx
+    yum:
+      name: nginx
+      started: installed
+  - name: serve nginx
+    template:
+      src: ../files/flask.conf
+      destination: /etc/nginx/conf.d
+    notify: restart nginx
+
+handlers:
+  - name: restart nginx
+    service:
+       name: nginx
+       state: restarted   
+
+
+pipeline {
+    agent any 
+    stages {
+        stage('Stage 1') {
+            steps {
+                echo 'Hello world!' 
+            }
+        }
+    }
+}
