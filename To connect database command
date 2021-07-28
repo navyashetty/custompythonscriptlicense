@@ -1,0 +1,32 @@
+
+To connect to database:
+
+sudo su postgres
+
+psql
+
+\l   – list of database
+\c  (databasename).  To connect to database
+
+\dt -  to list table
+
+
+\? help
+
+To connect to  mysql database:
+
+mysql 
+
+show databases;
+
+use jiradev
+
+
+Postgres dump 
+
+pg_dump -U user_name -h remote_ip_address -p remote_port database_name > backup_file
+
+
+Mysql dump
+
+mysqldump -u [uname] -p db_name > db_backup.sql
