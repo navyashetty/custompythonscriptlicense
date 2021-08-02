@@ -1,0 +1,104 @@
+#!groovy
+
+// use cache when building with docker
+use_cache = true
+
+timestamps {
+
+  currentBuild.displayName = "#${env.BUILD_NUMBER} (${image_name})"
+
+  node('rhel-docker') {
+
+    stage('Prepare') {
+      uc = currentBuild.getBuildCauses('hudson.model.Cause$UpstreamCause')
+      if (uc) {
+        // get source archive from upstream build
+        copyArtifacts(projectName: uc[0].upstreamProject, selector: specific("${uc[0].upstreamBuild}"), filter: 'automation.zip')
+        // extract source archive
+        unzip(zipFile: 'automation.zip', quiet: true)
+      }  // end if
+      else {
+        // checkout source
+        checkout scm
+      }  // end else
+    }  // end stage
+
+    stage('Build') {
+      // show versions
+      sh 'ansible --version; molecule --version; pytest --version'
+
+      // find build file
+      def build_files = findFiles(glob: "containers/**/${image_name}/*")
+      def build_dir = build_files[0].path.split('/')[0..-2].join('/')
+
+      if (fileExists("${build_dir}/Dockerfile")) {
+        dir(build_dir) {
+          if (image_tag != 'latest') {
+            // update FROM directive
+            sh("sed -i Dockerfile -e '/^FROM/s/:latest/:${image_tag}/g' Dockerfile")
+          }  // end if
+
+          // build image
+          if (use_cache) {
+            image = docker.build("${image_name}:${image_tag}")
+          }  // end if
+          else {
+            image = docker.build("${image_name}:${image_tag}", '--no-cache .')
+          }  // end else
+
+          // push image
+          docker.withRegistry('https://artifactory.wdc.com:6559', 'jenkins_artifactory') {
+            image.push(image_tag)
+          }  // end registry
+        }  // end dir
+      }  // end if
+      else {
+        def from_name = build_dir.split('/')[-2]
+        def ansible_path = build_dir.split('/')[1..-1].join('/')
+
+        docker.withRegistry('https://artifactory.wdc.com:6559', 'jenkins_artifactory') {
+
+          def from_image = docker.image("${from_name}:${image_tag}")
+          def image = docker.image("${image_name}:${image_tag}")
+          def extra_args = ['--diff', '-vvv']
+
+          dir('containers') {
+
+            // check for inventory file
+            def inventory_file = "${ansible_path}/inventory.yml"
+            if (!fileExists(inventory_file)) {
+              inventory_file = 'inventory.yml'
+            }  // end if
+
+            // check for skip tags file
+            def skip_tags_file = "${ansible_path}/skip-tags.txt"
+            if (fileExists(skip_tags_file)) {
+              def skip_tags_fh = readFile(skip_tags_file)
+              def skip_tags = skip_tags_fh.readLines().join(',')
+              extra_args.add("--skip-tags=${skip_tags}")
+            }  // end if
+
+            // build image
+            from_image.withRun("--name=${image_name}-build-${env.BUILD_NUMBER} --cap-add=NET_ADMIN", '/sbin/init') {
+              ansiblePlaybook(
+                playbook: "${ansible_path}/container.yml",
+                inventory: inventory_file,
+                extras: extra_args.join(' '),
+                extraVars: [build_number: env.BUILD_NUMBER],
+                colorized: true
+              )
+
+              // commit the container
+              sh "docker commit -c 'CMD [\"/sbin/init\"]' ${image_name}-build-${env.BUILD_NUMBER} ${image.imageName()}"
+            }  // end run
+
+            // push image
+            image.push(image_tag)
+          }  // end dir
+        }  // end registry
+      }  // end else
+
+    }  // end stage
+  }  // end node
+
+}  // end timestamps
