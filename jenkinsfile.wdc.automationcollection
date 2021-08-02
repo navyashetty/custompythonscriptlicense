@@ -1,0 +1,282 @@
+#!groovy
+
+// disable concurrent builds (per branch/PR only)
+properties([disableConcurrentBuilds()])
+
+// force complete test
+def complete_test = false
+
+def pod_label = env.JOB_NAME.split('/')[-2]
+podTemplate(
+  label: pod_label,
+  inheritFrom: 'molecule'
+) {
+  node(pod_label) {
+    def hash = sh(
+      returnStdout: true,
+      script: "echo -n '${env.BRANCH_NAME}:${env.BUILD_NUMBER}' | sha256sum"
+    )[0..7]
+    def molecule_files = []
+    def python_files = []
+    def yaml_files = []
+    def ansible_roles = []
+    def ansible_playbooks = []
+    def ansible_modules = []
+    stage('prepare') {
+
+      def source_branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+      def target_branch = env.CHANGE_TARGET ?: 'master'
+      
+      // checkout target branch
+      git(
+        branch: target_branch,
+        url: scm.userRemoteConfigs[0].url,
+        credentialsId: scm.userRemoteConfigs[0].credentialsId
+      )
+
+      // checkout source
+      checkout scm
+
+      if (source_branch == 'master' || complete_test) {
+        // list scenarios
+        findFiles(
+          glob: 'roles/*/molecule/*/molecule.yml'
+        ).each { molecule_file ->
+          def role_name = molecule_file.path.split('/')[1]
+          def scenario_name = molecule_file.path.split('/')[3]
+          molecule_files.add([role_name, scenario_name])
+        } // each
+
+        // list python files
+        findFiles(
+          glob: '**/*.py'
+        ).each { python_file ->
+          python_files.add(python_file.path)
+        } // each
+
+        // list yaml files
+        findFiles(
+          glob: '**/*.yml'
+        ).each { yaml_file ->
+          yaml_files.add(yaml_file.path)
+        } // each
+
+        // list ansible roles
+        findFiles(
+          glob: 'roles/*/meta/main.yml'
+        ).each { meta_file ->
+          def role_name = meta_file.path.split('/')[1]
+          ansible_roles.add("roles/${role_name}")
+        } // each
+
+        // list ansible playbooks
+        findFiles(
+          glob: 'playbooks/*.yml'
+        ).each { playbook_file ->
+          ansible_playbooks.add(playbook_file.path)
+        } // each
+
+        // list ansible modules
+        findFiles(
+          glob: 'plugins/modules/*.py'
+        ).each { module_file ->
+          def module_filename = module_file.path.split('/')[2]
+          def module_name = module_filename[0..-4]
+          ansible_modules.add(module_name)
+        } // each
+
+      } // if
+      else {
+        // list changed files
+        def changed_files = sh(
+          returnStdout: true,
+          script: "git diff --name-only \$(git merge-base origin/${target_branch} HEAD)"
+        ).split()
+        echo 'Changed files:\n'+changed_files.join('\n')
+
+        def changed_files_existing_only = sh(
+          returnStdout: true,
+          script: "git diff --diff-filter=d --name-only \$(git merge-base origin/${target_branch} HEAD)"
+        ).split()
+        echo 'Changed files (existing only):\n'+changed_files_existing_only.join('\n')
+
+        for (changed_file in changed_files) {
+          // list scenarios & ansible roles
+          if (changed_file.startsWith('roles/')) {
+            def role_name = changed_file.split('/')[1]
+            if (fileExists("roles/${role_name}")) {
+              if (changed_file.startsWith("roles/${role_name}/molecule")) {
+                def scenario_name = changed_file.split('/')[3]
+                if (fileExists("roles/${role_name}/molecule/${scenario_name}/molecule.yml")) {
+                  molecule_files.add([role_name, scenario_name])
+                } // if
+              } // if
+              else {
+                findFiles(
+                  glob: "roles/${role_name}/molecule/*/molecule.yml"
+                ).each { molecule_file ->
+                  def scenario_name = molecule_file.path.split('/')[3]
+                  molecule_files.add([role_name, scenario_name])
+                } // each
+                ansible_roles.add("roles/${role_name}")
+              } // else
+            } // if
+          } // if
+        } // for
+
+        for (changed_file in changed_files_existing_only) {
+          // list python files
+          if (changed_file.endsWith('.py')) {
+            python_files.add(changed_file)
+          } // if
+
+          // list yaml files
+          else if (changed_file.endsWith('.yml')) {
+            yaml_files.add(changed_file)
+          } // else if
+
+          // list ansible playbooks
+          if (changed_file.startsWith('playbooks/')) {
+            ansible_playbooks.add(changed_file)
+          } // if
+
+          // list ansible modules
+          if (changed_file.startsWith('plugins/modules/') && changed_file.endsWith('.py')) {
+            def module_filename = changed_file.split('/')[2]
+            def module_name = module_filename[0..-4]
+            ansible_modules.add(module_name)
+          } // if
+        } // for
+
+      // remove duplicates
+      molecule_files.unique()
+      ansible_roles.unique()
+
+      } // else
+
+      echo 'Molecule scenarios:\n'+molecule_files.collect({molecule_file -> return molecule_file.join(':')}).join('\n')
+
+    } // stage
+    container('molecule') {
+      stage('build') {
+
+        // buid and install collection
+        sh('ansible-galaxy collection build')
+        sh('ansible-galaxy collection install *.tar.gz')
+
+      } // stage
+
+      stage('lint') {
+
+        // run yamllint
+        if (yaml_files.size()) {
+          sh('yamllint -s '+yaml_files.join(' '))
+        } // if
+
+        // run yamllint
+        if (python_files.size()) {
+          sh('flake8 '+python_files.join(' '))
+          //sh('black --check '+python_files.join(' '))
+        } // if
+
+        // run playbook syntax check
+        if (ansible_playbooks.size()) {
+          ansible_playbooks.each { playbook ->
+            ansiblePlaybook(
+              playbook: playbook,
+              extras: '--syntax-check',
+              colorized: false
+            )
+          } // each
+        } // if
+
+        // run ansible lint
+        if (ansible_playbooks.size() || ansible_roles.size()) {
+          sh('ansible-lint '+(ansible_playbooks+ansible_roles).join(' '))
+        } // if
+
+        // run ansible doc
+        if (ansible_modules.size()) {
+          sh('ansible-doc -M plugins/modules '+ansible_modules.join(' ')+' >/dev/null')
+        } // if
+
+      } // stage
+
+      try {
+        stage('test') {
+          def molecule_tests = [:]
+          molecule_files.each { molecule_file ->
+            (role_name, scenario_name) = molecule_file
+            molecule_tests["${role_name}:${scenario_name}"] = moleculeTest(role_name, scenario_name, hash)
+          } // each
+          parallel molecule_tests
+        } // stage
+      } // try
+      finally {
+        stage('post') {
+          archiveArtifacts(
+            artifacts: 'roles/*/*-molecule.log',
+            allowEmptyArchive: true
+          )
+        } // stage
+      } // finally
+
+    } // container
+  } // node
+} // podTemplate
+
+
+def moleculeTest(role_name, scenario_name, hash) {
+
+  return {
+    stage("${role_name}:${scenario_name}") {
+      dir("roles/${role_name}") {
+
+        // load credentials from separate groovy file inside scenario dir
+        def scenario_credentials_file = "molecule/${scenario_name}/credentials.groovy"
+        def scenario_credentials = []
+        if (fileExists(scenario_credentials_file)) {
+          echo "Loading ${scenario_credentials_file}"
+          def scenario_credentials_class = load scenario_credentials_file
+          scenario_credentials = scenario_credentials_class.credentials()
+        } // end if
+
+        withCredentials(scenario_credentials) {
+          withEnv([
+            "BUILD_TAG=m${hash}"
+          ]) {
+
+            sh('molecule --version')
+
+            try {
+              // run molecule test (without destroy)
+              def molecule_rc = sh(
+                script: "molecule --debug -vvv test --destroy never -s ${scenario_name} >${role_name}-${scenario_name}-molecule.log 2>&1",
+                returnStatus: true
+              )
+              if (molecule_rc != 0) {
+                sh("cat ${role_name}-${scenario_name}-molecule.log; exit ${molecule_rc}")
+              } // if
+            } // try
+
+            finally {
+              // run molecule destroy
+              def molecule_destroy_rc = sh(
+                script: "molecule --debug -vvv destroy -s ${scenario_name} >${role_name}-${scenario_name}-molecule-destroy.log 2>&1",
+                returnStatus: true
+              )
+              if (molecule_destroy_rc != 0) {
+                sh("cat ${role_name}-${scenario_name}-molecule-destroy.log; exit ${molecule_destroy_rc}")
+              } // if
+            } // finally
+
+            // list ansible redirects
+            sh("grep 'redirecting ' ${role_name}-${scenario_name}-molecule.log || exit 0")
+
+          } // withEnv
+        } // withCredentials
+      } // dir
+    } // stage
+  } // return
+
+} // moleculeTest
