@@ -1,0 +1,429 @@
+#!groovy
+
+// Different modes for this job:
+//
+// 1. Any change to the containers folder will trigger the container builds and all test scenarios.
+//    Pipeline: Prepare -> Build -> (Test)* -> (Push)** -> Cleanup
+//      * Test stage will only run if Build stage was successful.
+//      ** Push stage will only run if Test stage was successful AND current branch is the master branch.
+//
+// 2. Any change to the Jenkinsfile file will also trigger the container builds and all test scenarios.
+//    Pipeline: Prepare -> Build -> (Test)* -> (Push)** -> Cleanup
+//      * Test stage will only run if Build stage was successful.
+//      ** Push stage will only run if Test stage was successful AND current branch is the master branch.
+//
+// 3. Any change to a role file will trigger all molecule tests for that role (if present).
+//    Pipeline: Prepare -> Test -> (Post)*
+//      * Post stage will only run if an external job is used for the molecule test.
+//
+// 4. Any change to a file in a molecule scenario will trigger that specific molecule test.
+//    Pipeline: Prepare -> Test -> (Post)*
+//      * Post stage will only run if an external job is used for the molecule test.
+//
+// To disable triggering container builds and molecule tests when the Jenkinsfile is changed,
+// set the following variable to false.
+check_changed_jenkinsfile = false
+//
+
+
+// run jobs one at a time
+properties([disableConcurrentBuilds()])
+
+// will be set to true if changes are found in the containers folder
+build_containers = false
+// a unique string for this build, will be replaced by a sha
+build_tag = 'm12345678'
+// map of finished build jobs, containes image_name, image_tag pairs
+build_images = [:]
+// default image tag, when building images, a temporary tag will be used to test the newly build images
+image_tag = 'latest'
+// list of lists build jobs to be run in parallel
+build_list = []
+// list of test steps/jobs to be run in parallel
+parallel_test_steps = [:]
+// list of finished test jobs
+molecule_jobs = []
+// images will only be pushed with the tag latest if we are building the master branch
+push_images = env.BRANCH_NAME == 'master'
+// list of failed tests
+failed_tests = []
+
+
+// PIPELINE
+
+timestamps {
+  try {
+    podTemplate(
+      label: "kube-molecule-${env.BUILD_NUMBER}",
+      cloud: 'kubernetes',
+      serviceAccount: 'jenkins-test-serviceaccount',
+      containers: [
+        containerTemplate(
+          name: 'redhat-molecule',
+          image: 'artifactory.wdc.com:6559/redhat-molecule:latest',
+          command: 'cat',
+          ttyEnabled: true,
+          resourceRequestCpu: '250m',
+          resourceRequestMemory: '500Mi',
+          resourceLimitCpu: '250m',
+          resourceLimitMemory: '500Mi',
+          alwaysPullImage: true
+        )
+       ]
+    ) {
+      node("kube-molecule-${env.BUILD_NUMBER}") {
+        container('redhat-molecule') {
+          notify('Started')
+
+          source_branch = env.CHANGE_BRANCH ?: env.BRANCH_NAME
+          target_branch = env.CHANGE_TARGET ?: 'master'
+
+          build_containers = prepareStage(build_containers, build_images, build_list, build_tag, image_tag, parallel_test_steps)
+
+          if (build_containers) {
+            buildStage(build_list)
+          }  // end if
+          try {
+            testStage(parallel_test_steps)
+          }  // end try
+          finally {
+            postStage(molecule_jobs)
+          }  // end finally
+
+        }  // end container
+      }  // end node
+    }  // end template
+    if (build_containers) {
+      cleanupStage(build_images, push_images)
+    }  // end if
+    notify('Success')
+  }  // end try
+  catch (Exception e) {
+    if (build_containers) {
+      cleanupStage(build_images)
+    }  // end if
+    notify('Failed')
+    error e.toString()
+  }  // end catch
+}  // end timestamps
+
+// METHODS
+
+def prepareStage(build_containers, build_images, build_list, build_tag, image_tag, parallel_test_steps) {
+  stage('Prepare') {
+
+    def build_sha = sh(returnStdout: true, script: "echo -n '${env.BRANCH_NAME}:${env.BUILD_NUMBER}' | sha256sum")[0..7]
+    build_tag = "m${build_sha}"
+    echo "Build tag: ${build_tag}"
+
+    def test_all = false
+    def tests = [:]
+
+    // checkout target branch
+    git(
+      branch: target_branch,
+      url: 'https://bitbucket.wdc.com/scm/it/it-ops-automation.git',
+      credentialsId: 'jenkins_bitbucket'
+    )
+
+    // checkout source
+    checkout scm
+
+    if (source_branch == 'master') {
+      if (env.JENKINS_STAGE == 'prod') {
+        build_containers = true
+      }  // end if
+      test_all = true
+    }  // end if
+    else {
+      // analyse changes
+      def changed_files = sh(returnStdout: true, script: "git diff --name-only \$(git merge-base origin/${target_branch} HEAD)").split()
+      echo "Changed files:\n${changed_files.join('\n')}"
+      def jenkinsfiles = ['Jenkinsfile', 'Jenkinsfile.build', 'Jenkinsfile.test']
+      for (changed_file in changed_files) {
+        if (changed_file.startsWith('containers/') || changed_file == 'requirements.txt' || check_changed_jenkinsfile && jenkinsfiles.contains(changed_file)) {
+          build_containers = true
+          test_all = true
+          break
+        }  // end if
+        else if (changed_file.startsWith('playbooks/roles')) {
+          def molecule_tests = findMoleculeTests(changed_file)
+          molecule_tests.each { test_name, test_path ->
+            tests[test_name] = test_path
+          }  // end each
+        }  // end elseif
+      }  // end for
+    }  // end else
+
+    if (test_all) {
+      // find all molecule tests
+      def molecule_files = findFiles(glob: 'playbooks/roles/**/molecule/*/molecule.yml')
+      molecule_files.each { molecule_file ->
+        (test_path, test_name) = parseMoleculePath(molecule_file.path)
+        tests[test_name] = test_path
+      }  // end each
+    }  // end if
+
+    if (build_containers) {
+      // exit pipeline if not on prod
+      if (env.JENKINS_STAGE != 'prod') {
+        echo "Aborting test, images are only build on prod."
+        notify('Success')
+        return
+      }  // end if
+
+      // update image tag
+      def date = new Date()
+      image_tag = date.format('yyyyMMddHHmm')+'-latest'
+
+      // list container build files
+      def container_build_list = findBuilds()
+      container_build_list.each { image_list ->
+        def parallel_build_steps = [:]
+        image_list.each { image_name ->
+          parallel_build_steps["${image_name}"] = containerBuildJob(image_name, image_tag, build_images)
+        }  // end each
+        echo "Added container builds:\n${parallel_build_steps.sort().keySet().join('\n')}"
+        build_list.add(parallel_build_steps)
+      }  // end each
+    }  // end if
+
+    // queue tests
+    tests.each { test_name, test_path ->
+      parallel_test_steps[test_name] = moleculeTestJob(test_path, test_name, image_tag, build_tag)
+    }  // end each
+    echo "Added molecule tests:\n${parallel_test_steps.sort().keySet().join('\n')}"
+
+    // create source archive for subjobs
+    zip(zipFile: 'automation.zip', archive: true, glob: 'containers/**, playbooks/**, requirements.txt')
+
+  }  // end stage
+  return build_containers
+}  // end def
+
+
+def parseMoleculePath(path) {
+  // parse a molecule path to extract role name and scenario name
+  def role_path = path[0..path.indexOf('/molecule/')-1]
+  def role_name = role_path[role_path.indexOf('/roles/')+7..-1]
+  def scenario_name = path.split('/')[-2]
+  return [role_path, "${role_name}:${scenario_name}"]
+}  // end def
+
+
+def findMoleculeTests(path) {
+   // find all relevant molecule test scenarios for given path
+   def molecule_tests = [:]
+   def top_role_name = path.split('/')[2]
+   def molecule_files = findFiles(glob: "playbooks/roles/${top_role_name}/**/molecule/*/molecule.yml")
+   for (molecule_file in molecule_files) {
+     (test_path, test_name) = parseMoleculePath(molecule_file.path)
+     (role_name, scenario_name) = test_name.split(':')
+     if (path.startsWith("${test_path}/molecule/${scenario_name}/")) {
+       // changed file is inside a molecule scenario, return only that scenario
+       molecule_tests = [:]
+       molecule_tests[test_name] = test_path
+       break
+     }  // end if
+     else if (path.startsWith("${test_path}/") && !path.startsWith("${test_path}/molecule/")) {
+        molecule_tests[test_name] = test_path
+     }  // end elseif
+   }  // end for
+   return molecule_tests
+}  // end def
+
+
+def findBuilds() {
+  //
+  // Group container build files per nested level.
+  //
+  // Example:
+  // A containers folder structure like this:
+  //
+  //   containers
+  //   ├── centos-base
+  //   │   ├── dev-centos-base
+  //   │   │   ├── dev-centos-all
+  //   │   │   │   └── container.yml
+  //   │   │   └── Dockerfile
+  //   │   └── Dockerfile
+  //   └── redhat-base
+  //       ├── dev-redhat-base
+  //       │   ├── dev-redhat-all
+  //       │   │   ├── container.yml
+  //       │   │   ├── dev-redhat-ansible
+  //       │   │   │   └── container.yml
+  //       │   │   ├── dev-redhat-httpd
+  //       │   │   │   └── container.yml
+  //       │   │   └── dev-redhat-mysql
+  //       │   │       ├── container.yml
+  //       │   │       └── dev-redhat-icinga
+  //       │   │           └── container.yml
+  //       │   ├── dev-redhat-dns
+  //       │   │   └── Dockerfile
+  //       │   └── Dockerfile
+  //       ├── Dockerfile
+  //       ├── redhat-docker
+  //       │   └── Dockerfile
+  //       └── redhat-kubectl
+  //           ├── Dockerfile
+  //           └── redhat-molecule
+  //               └── Dockerfile
+  //
+  // Returns:
+  //
+  //   [
+  //     [centos-base, redhat-base],
+  //     [dev-centos-base, dev-redhat-base, redhat-docker, redhat-kubectl],
+  //     [dev-centos-all, dev-redhat-all, dev-redhat-dns, redhat-molecule],
+  //     [dev-redhat-ansible, dev-redhat-httpd, dev-redhat-mysql],
+  //     [dev-redhat-icinga]
+  //   ]
+  //
+
+  def levels = [:]
+  def build_files = findFiles(glob: 'containers/**/Dockerfile') + findFiles(glob: 'containers/**/container.yml')
+  build_files.each { build_file ->
+    level = build_file.path.split('/').size()
+    image_name = build_file.path.split('/')[-2]
+    if (!levels.containsKey(level)) {
+      levels[level] = []
+    }  // end if
+    levels[level].add(image_name)
+  }  // end each
+  return levels.sort().values()
+
+}  // end def
+
+
+def buildStage(build_list) {
+
+  // run all builds with the same nested level in parallel
+  build_list.eachWithIndex { parallel_build_steps, i ->
+    stage("Build level $i") {
+      parallel parallel_build_steps
+    }  // end stage
+  }  // end each
+
+}  // end def
+
+
+def testStage(parallel_test_steps) {
+  stage('Test') {
+
+    // run all tests in parallel
+    parallel parallel_test_steps
+
+  }  // end stage
+}  // end def
+
+
+def cleanupStage(build_images, push_images=false) {
+  node('rhel-docker') {
+
+    if (push_images) {
+      stage('Push') {
+
+        build_images.each { image_name, image_tag ->
+          echo "Pushing ${image_name}:${image_tag} as latest"
+          // push images to the registry
+          docker.withRegistry('https://artifactory.wdc.com:6559', 'jenkins_artifactory') {
+            image = docker.image("${image_name}:${image_tag}")
+            image.push('latest')
+          }  // end registry
+        } // end each
+
+      }  // end stage
+    }  // end if
+
+    stage('Cleanup') {
+
+      // pass registry credentials
+      withCredentials([
+        [$class: 'UsernamePasswordMultiBinding', credentialsId: 'jenkins_artifactory', usernameVariable: 'ARTIFACTORY_USERNAME', passwordVariable: 'ARTIFACTORY_PASSWORD']
+      ]) {
+        build_images.each { image_name, image_tag ->
+          // delete images from the registry
+          url = "https://artifactory.wdc.com/artifactory/it-ops-docker/${image_name}/${image_tag}"
+          sh "curl -sS -u ${ARTIFACTORY_USERNAME}:${ARTIFACTORY_PASSWORD} -X DELETE ${url}"
+        }  // end each
+      }  // end credentials
+
+    }  // end stage
+
+  }  // end node
+}  // end def
+
+
+def postStage(molecule_jobs) {
+  stage('Post') {
+
+    molecule_jobs.each { molecule_job ->
+      def job_id = molecule_job.getNumber()
+      copyArtifacts(
+        projectName: 'IT-SDF/molecule-test',
+        selector: specific("${job_id}"),
+        target: "${job_id}",
+        optional: true
+      )
+    }  // end each
+    junit allowEmptyResults: true, testResults: 'playbooks/roles/**/molecule/**/junit*.xml'
+
+    if (failed_tests.size() > 0) {
+      echo "Failed tests:\n${failed_tests.sort().join('\n')}"
+    }  // end if
+
+  }  // end stage
+}  // end def
+
+
+def containerBuildJob(image_name, image_tag, build_images) {
+
+  return {
+    def build_job = build(
+      job: 'IT-SDF/container-build',
+      parameters: [
+        [$class: 'StringParameterValue', name: 'branch_name', value: source_branch],
+        [$class: 'StringParameterValue', name: 'image_name', value: image_name],
+        [$class: 'StringParameterValue', name: 'image_tag', value: image_tag],
+      ],
+      wait: true,
+      propagate: true
+    )
+    build_images[image_name] = image_tag
+
+  }  // end closure
+}  // end def
+
+
+def moleculeTestJob(test_path, test_name, image_tag, build_tag) {
+
+  return {
+    (role_name, scenario_name) = test_name.split(':')
+    def molecule_job = build(
+      job: 'IT-SDF/molecule-test',
+      parameters: [
+        [$class: 'StringParameterValue', name: 'branch_name', value: source_branch],
+        [$class: 'StringParameterValue', name: 'test_path', value: test_path],
+        [$class: 'StringParameterValue', name: 'role_name', value: role_name],
+        [$class: 'StringParameterValue', name: 'scenario_name', value: scenario_name],
+        [$class: 'StringParameterValue', name: 'image_tag', value: image_tag],
+        [$class: 'StringParameterValue', name: 'build_tag', value: build_tag]
+      ],
+      wait: true,
+      propagate: false
+    )
+    molecule_jobs.add(molecule_job)
+    if (molecule_job.result == 'FAILURE') {
+      failed_tests.add(test_name)
+      error "Failed in branch ${test_name}"
+    }  // end if
+
+  }  // end closure
+}  // end def
+
+
+def notify(status) {
+  // send teams notification
+  office365ConnectorSend message: "Latest status of build #${env.BUILD_NUMBER}", status: status, webhookUrl: env.SDF_TEAMS
+}  // end def
