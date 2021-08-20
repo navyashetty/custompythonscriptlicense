@@ -52,6 +52,15 @@ get_url:
 	  handlers:
 	      - name: restart nginx
 	        service: name=nginx state= restarted
+		
+	8. vars and default difference
+	9. Name the modules
+	10. module for rest api
+	11. how to call role in a playbook
+	12. How to call particular task from role in a playbook
+	13. How to make task execution parallely and sequentially
+	14. How to run playbook to a first set of host from the inventory group
+	15. 
 
 
 Jenkins: 
@@ -135,20 +144,9 @@ Jenkins:
 	    minRuns: 10
 	36. Flow of pipeline
 	37. Cron that runs every Monday and Wednesday at 10pm
+	38. What is workspace in jenkins
 	
-
 	
-
-	
-
-	
-
-		
-
-
-
-
-
 
 
 
@@ -177,6 +175,10 @@ Docker:
 	Ansible: It is an open-source, IT automation engine system. This server and configuration management tool, which is supported by Red Hat, makes IT automation simple as it ends repetitive tasks and enables faster application deployments, thus allows DevOps teams to perform more strategic work. It automates configuration management, orchestration, application deployment, cloud provisioning, and a number of other IT requirements. It further allows users to control multi-tier complex deployment and security management. Companies like Tokopedia, Revolut, Trivago use Ansible.
 	Docker: It is a software container technology platform that enables its users to create, deploy, run, and manage applications within the containers. Its modular design enables users to build applications securely, both on-premises and in the cloud. Additionally, it uses a number of the Linux kernel’s features such as namespaces, cgroups, AppArmor profiles, and more, to sandbox processes into existing configurable virtual environments. Also, due to the least compatibility issues, applications can run wherever one wants without causing compatibility hurdles. Companies like Twitter, Spotify, Pinterest, PayPal, Vox media use Docker.
 	Kubernetes: It is an open-source system that provides mechanisms to deploy, maintain, and scale containerized applications with automation. Designed by Google and is currently supported by the Cloud Native Computing Foundation (CNCF). This multi-layered tool implements the Infrastructure as Code principle of DevOps, which allows independent management of each infrastructure layer, i.e., from a single container to pods, nodes, namespaces, and clusters, along with networking and physical hosts. It fulfills customers’ demands by deploying applications predictably and quickly, scaling them, launching new features, and limiting hardware usage to only the needed resources. Companies like Google, StackShare, Slack use Kubernetes.
+	7. Is it possible to run windows image on linux ?
+	8. Command to attach volume
+	9. command to publish ports
+	10. How to list container
 	
 	
 	
@@ -241,27 +243,32 @@ Kubernetes:
 	To see more about node
 	
 	Kubectl describe node uls-od-sdfk13.wd.com
-	32. 
+	
+	32.  Ingress controll explaination
+	33. Auto scale - HPA
+	34 
 	
 
 Shell/Bash: 
-	1. 
+	1. How to execution was successfull -  echo $?
 	2. Script to transfer file from source machine to multiple serves
 	pscp  command to transfer
 
-          for HOST in server1 server2 server3; do
+          for HOST in server1 server2 server3; 
+	  do
             scp somefile $HOST:~/somedir/
            Done 
-	1. Bash script/python  to write for loop
+	   
+	3. Bash script/python  to write for loop
 	
 	for VARIABLE in 1 2 3 4 5 .. N
-do
+       do
 	command1
 	command2
 	commandN
-Done
+       Done
 	
-	Python: 
+Python: 
 	fruits = ["apple", "banana", "cherry"]
 	for x in fruits:
 	  print(x)
@@ -281,6 +288,7 @@ if a == b:
   print "Both inputs are equal"
 else:
   print "Your input is not equal."
+  
 	5. Compare 2 string
 	
 	#!/bin/bash
@@ -327,6 +335,8 @@ else :
 	    n = n // 10
 	 
 	print(rev)
+	
+	
 Python :
 	1.  How can looping be done over a list of hosts in a group, inside of a template?
 {% for host in groups['db_servers'] %} {{ hostvars[host]['ansible_eth0']['ipv4']['address'] }} {% endfor %}.
@@ -412,6 +422,8 @@ What is the difference between compile and install?
 Compile compiles the source code of the project
 whereas
 Install installs the package into the local repository, for use as a dependency in other projects locally
+What do maven clean install?
+
 
 
 Bamboo:
@@ -483,6 +495,13 @@ FOREIGN KEY - Ensures referential integrity for a record in another table.
 
 
 
+Linux:
+
+1.port opening - netstat -tulpn
+2. process - ps -ef
+3. how check the port of remote server  -  telnet h
+
+
 
 
 
@@ -495,5 +514,8 @@ Ansible-galaxy install -r requirement.yml --force --vvv
 Ansible-playbook wdc.automation.jira -l uls-ot-jira7.wdc.com   ( it works only 2.11 version)
                                            or
 Ansible-playbook ./ansible_collections/wdc/automation/playbooks/jira.yml -l uls-ot-jira7.wdc.com. (it works on both 2.11 and 2.10 version)
+
+
+
 
 
