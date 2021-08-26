@@ -1,0 +1,32 @@
+Bitbucket Best practices
+
+
+Jira_config, bitbucket_config - Atlassian jira 
+
+
+1. ssh and https - https://help.github.com/en/github/using-git/which-remote-url-should-i-use
+2. Personal token and ssh token
+3. Bitbucket and jira integration -  https://confluence.atlassian.com/bitbucketserver/linking-bitbucket-server-with-jira-776640408.html
+4. Pull request  - https://confluence.atlassian.com/bitbucketserver/pull-request-merge-strategies-844499235.html
+5. Branch permission - https://confluence.atlassian.com/bitbucketserver/using-branch-permissions-776639807.html
+6. Merge check doc  -https://confluence.atlassian.com/bitbucketserver/checks-for-merging-pull-requests-776640039.html
+7.  Merge a pull request - https://confluence.atlassian.com/bitbucketserver/merge-a-pull-request-808488562.html
+8. Repository ownership and general repository permissions
+9. Cleanup of branches
+10. Git Clone fails - fatal: The remote end hung up unexpectedly. fatal: early EOF fatal: index-pack failed - https://confluence.atlassian.com/bitbucketserverkb/git-clone-fails-fatal-the-remote-end-hung-up-unexpectedly-fatal-early-eof-fatal-index-pack-failed-779171803.html
+11. Understanding Diff view in Bitbucket Server - https://confluence.atlassian.com/bitbucketserverkb/understanding-diff-view-in-bitbucket-server-859450562.html
+12. Case-sensitivity in branch name causes issue - https://confluence.atlassian.com/bitbucketserverkb/case-sensitivity-in-branch-name-causes-issue-816521190.html
+13. Git clone fails due when cloning via SSH - https://confluence.atlassian.com/bitbucketserverkb/git-clone-fails-due-when-cloning-via-ssh-879243661.html
+14. What's the difference between Crucible and Bitbucket Server? Do I need both? - https://confluence.atlassian.com/bitbucketserverkb/what-s-the-difference-between-crucible-and-bitbucket-server-do-i-need-both-779171640.html
+15. Using forks in Bitbucket Server - https://confluence.atlassian.com/bitbucketserver/using-forks-in-bitbucket-server-776639958.html
+16. Managing webhooks in Bitbucket Server - https://confluence.atlassian.com/bitbucketserver/managing-webhooks-in-bitbucket-server-938025878.html
+17. Compare changes in Bitbucket Server - https://confluence.atlassian.com/bitbucketserver/compare-changes-in-bitbucket-server-970595881.html
+18. Working with Git LFS Files - https://confluence.atlassian.com/bitbucketserver/working-with-git-lfs-files-970595880.html
+19. Merge squash and rebase : https://stackoverflow.com/questions/41946475/git-why-cant-i-delete-my-branch-after-a-squash-merge  https://stackoverflow.com/questions/2427238/in-git-what-is-the-difference-between-merge-squash-and-rebase
+
+
+
+Git Push Fails - fatal: The remote end hung up unexpectedly
+- https://confluence.atlassian.com/bitbucketserverkb/git-push-fails-fatal-the-remote-end-hung-up-unexpectedly-779171796.html
+How do I block all tags from being pushed to a repository
+https://confluence.atlassian.com/bitbucketserverkb/how-do-i-block-all-tags-from-being-pushed-to-a-repository-822021700.html
