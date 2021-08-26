@@ -1,0 +1,213 @@
+
+Atlassian Jira Course
+
+Module 1:  Mapping Business requirement in Jira -  
+
+Understanding business requirement - Draw out what they need , if it process requirement(what can you do with workflow) If it Data requirement (what field type may support this), If it only people requirement(how about permission and issue security)
+Ask stakeholders the right questions  - 
+Questions to Manager :
+
+Whats the organisation’s mission? , Whats are your business processes?, who needs access? , What do they need to do ? , What type of things do you need to track and report on ?, What security do you need ? , What other tools do you use? If they know bit about Jira then ask them what should be the workflow, what’s fields they need.
+
+Questions to Users/Developers:
+
+What are the different tasks you perform in a typical day?
+What is your process for those tasks?
+Is your work part of the larger process within the company?
+Where do you start and where do you hand work off to other people ?
+How long do these tasks normally take ?
+What sort of data do you need to collect to perform these tasks?
+How can you tell when something is done?
+Do you need to provide reports on your works? What,to whom, and how often ?
+
+Techniques to use in stakeholder meetings
+
+Whiteboard
+Post it notes
+Flow charts
+Confluence
+MoSCoW prioritisation technique
+    Must have, Should have, could have, Wont have
+    Discuss and decide together before implementation
+
+Map business requirement to jira configuration - Once you understand the business requirements, map these in Jira Configuration. implement in jira
+
+
+7 key steps 
+
+1. Listen, Understand and then configure jira t meet business requirements
+2. Make fields, transitions,statuses, ans screens intuitive and easy to understand
+3. Keep workflow simple
+4. Set permissions that balance how your teams work and your security requirements
+5. Use project roles in schemes
+6. Use few schemes and share them 
+7. Automate as much as possible
+
+Why it is important to go through the business analysis step before implementing changes in jira ?
+
+It’s important to go through the business analysis step before implementing your changes in Jira. If you dive into implementation before getting input and thinking things through, you will likely sendup with a system that doesn’t meet users’ needs. That means you’ll have frustrated users who will not use Jira properly, if at all. Your company will get little business value from jira. Also, you’ll have to redo configurations again to get then right, which will mean a lot of wasted time and effort for you. It will make your job harder in the long run.
+
+
+Takeways from course 1 Lecture 1
+
+. Ask lots of questoins in business language to draw out of stakeholders what they need.
+. Build it right the first time to avoid rework
+. Build it to meet your business requirements and suit your users
+
+
+ Lecture 2
+
+Who does what is Scrum teams
+
+Product owner
+  . Creates issues, priorities the backlog, runs reports…
+
+Scrum Master
+   . Creates and configure boards, creates sprints, run reports…
+
+Developers
+    . Work on issues, move issues on the board, create boards…
+
+
+
+Module 2  : Configurig Issue types, fields & screens
+
+
+Lecture 1: 
+
+What fields are needed to satisfy business requirements:
+  System fields
+   Custom fields
+
+How should those fields behave:
+  Visible/hidden
+   Required/optional
+
+When someone ask for a New Field Request what are the question we should ask
+
+1. What is the business value of this field?
+2. What is required of the enduser to submit this information?
+3. How long does it take a user to reliably collect and submit the information correctly?
+4. Is there any way to automate capturing that information
+5. When in the issue lifecycle do you need this information ?
+
+
+General best practice on custom fields
+
+1. Capture just the data that is needed to facilitate data driven decision making
+2. Dont create unnecessary fields  
+          Don’t create End Date if you can use system Due Date
+
+ Lecture 2: 
+
+When is a field visible to users ?
+
+1. Are present on the scree associated with issue operation
+2. Are not hidden in the field cnfiguration applicable to the issue
+3. The user has permission to edit the field . There is no special permission for it.  
+       Eg : Due date can be edited only if the user have scheduled permission set
+
+
+Module 3 : Customizing Workflow
+
+What makes up a workflow
+
+1. Status - (where) represent position 
+2. Transition - moves from status to status
+3. Assignee - Who
+
+Scrum - To do ,Done, 
+
+
+
+Eg: how to enable the time spent by developer for code review
+
+1. A condition that only users in Development can transition issues to code review
+2. A validator that the Time spent field must have a value
+3. A post function that copies the name from the Assignee field to the Developer field
+
+
+Condition : Must be met before transition is available,  who and under what circumstances.
+Validator : Checks input is valid during transition
+Post function : Automates actions after transition
+
+
+Most common Post function - Clearing the resolution where transition Ian issue back to unresolved
+                                                    Adding comment, Generating change history, update an issue fields such assignee automatically. Email notification.
+
+
+Triggers
+
+Automatically transition issues when events occur in your dev tools
+
+Eg:  Bitbucket (create branch). -  jira (open to in progress)
+        Pull request. - (In progress to In code review)
+        Merge -  (In code review to Done)
+
+
+
+Transition screens 
+
+. Transition screens are used when information is required as an issue moves through a transition
+. You can create custom transition screens
+
+Eg : Resolve screens
+
+
+Module 4:  Configuring Board and Sprint Permsissions
+
+Permissions
+
+1. Issue role : eg (assignee or reporter)
+2. Project role : Eg (administrator
+3. Global permission : eg ( shared dashboard and filters)
+4. Project Permission : eg (create issues)
+5. Issue security level : eg (restricted)
+
+Who can set issue security ? 
+
+Only users with the “Set issue Security” permission can set the security level on an issue to control who can access the issue.
+
+
+Module 5 : Applying New Configuration to projects
+
+List problems that can occurs as a  jira instance grows
+Apply a standard set of configurations to new and existing projects
+Migrate issues to a new workflow
+Migrate issues to a new issue type
+List best practices for changing schemes in an axixting project
+Reduce the number of unused schemes
+
+
+
+Users with jira administrators global permission 
+
+. Screens with too many fields
+.  Confusing fields names
+
+
+1. Use few schemes ans share them
+2. Use project roles in schemes and ensure project administrators add their team members to these roles
+3. Alert users of upcoming changes before you apply new schemes to existing projects
+4. Backup your jira data before changing schemes for a project
+
+
+Lab :
+
+Why isn't the System Default Field Configuration scheme listed on the Field configuration schemes Jira administration page? 
+Answer: This is an internal field configuration scheme that is created for each project that maps the project's issue types to the Default Field Configuration, by default. You can edit the mappings in the project itself
+
+
+103
+
+
+
+https://rol.redhat.com/rol/app/classes
+
+shshriva@redhat.com
+
+
+
+
+
+
