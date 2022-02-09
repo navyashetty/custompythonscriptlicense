@@ -145,6 +145,8 @@ Jenkins:
 	36. Flow of pipeline
 	37. Cron that runs every Monday and Wednesday at 10pm
 	38. What is workspace in jenkins
+	39. what is pipeline in jenkins
+	40. Declarative and Scripted pipeline
 	
 	
 
@@ -252,7 +254,7 @@ Kubernetes:
 Shell/Bash: 
 	1. How to execution was successfull -  echo $?
 	2. Script to transfer file from source machine to multiple serves
-	pscp  command to transfer
+	   pscp  command to transfer
 
           for HOST in server1 server2 server3; 
 	  do
@@ -261,12 +263,82 @@ Shell/Bash:
 	   
 	3. Bash script/python  to write for loop
 	
-	for VARIABLE in 1 2 3 4 5 .. N
-       do
-	command1
-	command2
-	commandN
-       Done
+	    for VARIABLE in 1 2 3 4 5 .. N
+             do
+	        command1
+	        command2
+	        commandN
+              Done
+	      
+	 4.  command execution should accept only 2 argument
+	 
+	      if [ $# -eq 2 ]
+                then
+                   execute the script
+              fi
+	
+	5.  swapping the 2 numbers
+	 
+	           # !/bin/bash
+		   
+                   # Program to swap two numbers
+		   
+                   # Static input of the
+                   # number
+                   first=5
+                   second=10
+   
+                   temp=$first
+                   first=$second
+                   second=$temp
+  
+                   echo "After swapping, numbers are:"
+-                  echo "first = $first, second = $second"
+  
+           6. Replace word in a file :  eg cat to dog
+	       
+	         sed -i 's/original/new/g' file.txt
+		 sed -i 's/cat/dog/g' file.txt
+		 
+           7. How to redirect output to a file
+	   
+	       0 - stdin, the standard input stream.
+               1 - stdout, the standard output stream.
+               2 - stderr, the standard error stream.
+	       
+	       write both stderr and stdout to two separate files:
+	       
+	       command 2> error.txt 1> output.txt
+	  
+	     To suppress the error messages from being displayed on the screen, redirect stderr to /dev/null:
+	     
+	      command 2> /dev/null
+	      
+	8. Min and Max how to find
+	9. print only the even number from the list
+	10. print only the multiples of that number
+	11. print only the first column in the ls -l output
+	      ls -l | awk '{print $1}'
+	      
+	12. execute the script only after getting into the direct
+	
+	           DIR="/home/project/Data Files/"
+		   if [ -d "$DIR" ]; then
+                     echo "'$DIR' found and now copying files, please wait ..."
+                   else
+                     echo "Warning: '$DIR' NOT found."
+                   fi
+		
+		
+	     cd /user/navya
+             if [echo $? -eq 0 ]
+	     then
+	         rm -rf *
+	     else
+	        echo "directory not exist"
+	     fi
+	
+	     
 	
 Python: 
 	fruits = ["apple", "banana", "cherry"]
